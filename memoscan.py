@@ -20,30 +20,35 @@ def scrape_website_text(url):
 
         text = soup.get_text(separator=' ')
         cleaned_text = re.sub(r'\s+', ' ', text).strip()
-        return cleaned_text[:8000]  # Truncate for token safety
+        return cleaned_text[:8000]  # Truncate for token limit
     except Exception as e:
         return f"Error scraping site: {e}"
 
-def clean_url(url):
-    if not url.startswith("http"):
-        return "https://" + url
-    return url
-
 def run_memoscan_stream(website_text):
-    prompt = """
+    print("Scraped text preview:\n", website_text[:500])  # Debug output
+
+    if website_text.startswith("Error scraping"):
+        yield f"<div class='result-block'>⚠️ {website_text}</div>"
+        return
+
+    if len(website_text.strip()) < 100:
+        yield "<div class='result-block'>⚠️ Not enough content to evaluate memorability.</div>"
+        return
+
+    prompt = f"""
 You are a senior brand consultant using Saffron’s Memorability Framework to evaluate how memorable a brand is based on its website content.
 
 Saffron’s research shows that brands which score highly on these six keys are more likely to be chosen quickly, remembered over time, and preferred at a premium. Your job is to help the brand understand where it stands — and how to improve.
 
 Evaluate the brand using the six keys below. For each one, provide:
 - A score from 1 to 10
-- A short title summarizing the result
-- A strategic explanation: what’s working, what’s not, and how memorability can be improved
+- A short title for the score
+- A strategic explanation: what is working, what is not, and how memorability could be enhanced
 
 The six keys are:
 
 1. **Emotion** – What level of emotion does the brand evoke?
-   - Does it trigger emotional reactions or is it purely factual?
+   - Does it trigger emotional reactions, or is it purely factual?
    - Does the tone create connection, warmth, trust, admiration, or excitement?
 
 2. **Attention** – How well does the brand capture and sustain attention?
@@ -67,34 +72,25 @@ The six keys are:
 
 ---
 
-Output each rating exactly using this format on a separate line:
+Output the results using this format exactly (for each key):
 
-Key | Score/10 | Short Title | Strategic Explanation (2–4 sentences)
+Key|Score/10|Short Title|Strategic Explanation (2–4 sentences)
 
 Now evaluate the following website content:
-""" + website_text
+\"\"\"
+{website_text}
+\"\"\"
+    """
 
     stream = client.chat.completions.create(
         model="gpt-4",
         messages=[
-            {"role": "system", "content": "You are a helpful assistant and strategic branding expert."},
+            {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": prompt}
         ],
         stream=True
     )
 
-    buffer = ""
     for chunk in stream:
-        delta = chunk.choices[0].delta
-        if hasattr(delta, "content") and delta.content:
-            buffer += delta.content
-            if "\n" in buffer:
-                lines = buffer.split("\n")
-                for line in lines[:-1]:
-                    line = line.strip()
-                    if line:
-                        yield f"<div class='result-block'>{line}</div>"
-                buffer = lines[-1]
-
-    if buffer.strip():
-        yield f"<div class='result-block'>{buffer.strip()}</div>"
+        if chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content
