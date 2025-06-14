@@ -1,83 +1,85 @@
-import os
 import requests
 from bs4 import BeautifulSoup
+import re
+import os
 from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
-api_key = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=api_key)
-
-MEMORABILITY_KEYS = [
-    {"name": "Emotional Impact", "description": "Does the brand message connect emotionally with its audience?"},
-    {"name": "Attention", "description": "How well does the brand attract and sustain attention?"},
-    {"name": "Clarity", "description": "Is the brand’s story clear and easy to understand?"},
-    {"name": "Involvement", "description": "Does the brand make the audience feel involved or engaged?"},
-    {"name": "Repetition", "description": "Are key brand elements repeated consistently across touchpoints?"},
-    {"name": "Consistency", "description": "Are visuals, tone, and messages aligned and coherent?"}
-]
-
-def clean_url(url):
-    if not url.startswith("http"):
-        url = "https://" + url
-    return url
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def scrape_website_text(url):
     try:
-        response = requests.get(url, timeout=5)
-        soup = BeautifulSoup(response.text, "html.parser")
-        text = soup.get_text(separator="\n")
-        return text[:10000]  # Limit to 10,000 characters
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        for script in soup(["script", "style", "noscript"]):
+            script.decompose()
+
+        text = soup.get_text(separator=' ')
+        cleaned_text = re.sub(r'\s+', ' ', text).strip()
+        return cleaned_text[:8000]  # Truncate for token limit
     except Exception as e:
-        return f"Error fetching website: {str(e)}"
+        return f"Error scraping site: {e}"
 
-def run_memoscan_stream(url):
-    url = clean_url(url)
-    page_text = scrape_website_text(url)
-
+def run_memoscan_stream(website_text):
     prompt = f"""
-You are a senior brand strategist at a global branding consultancy.
-Your task is to evaluate the memorability of the website content provided below.
+You are a senior brand consultant using Saffron’s Memorability Framework to evaluate how memorable a brand is based on its website content.
 
-Score the content from 1 to 10 for each of the following six keys of memorability:
+Saffron’s research shows that brands which score highly on these six keys are more likely to be chosen quickly, remembered over time, and preferred at a premium. Your job is to help the brand understand where it stands — and how to improve.
 
-1. Emotional Impact — Does the brand message connect emotionally with its audience?
-2. Attention — How well does the brand attract and sustain attention?
-3. Clarity — Is the brand’s story clear and easy to understand?
-4. Involvement — Does the brand make the audience feel involved or engaged?
-5. Repetition — Are key brand elements repeated consistently across touchpoints?
-6. Consistency — Are visuals, tone, and messages aligned and coherent?
+Evaluate the brand using the six keys below. For each one, provide:
+- A score from 1 to 10
+- A short title for the score
+- A strategic explanation: what is working, what is not, and how memorability could be enhanced
 
-Return your output in **exactly** this format, one line at a time:
+The six keys are:
 
-Key|Score|Explanation
+1. **Emotion** – What level of emotion does the brand evoke?
+   - Does it trigger emotional reactions, or is it purely factual?
+   - Does the tone create connection, warmth, trust, admiration, or excitement?
 
-For example:
-Clarity|8|The message is clearly structured and easy to understand, with intuitive navigation.
+2. **Attention** – How well does the brand capture and sustain attention?
+   - Does the content and story surprise, intrigue, or feel distinctive?
+   - Is there a creative spark or hook that keeps people engaged?
 
-Now begin your analysis of the following website content:
-\"\"\"
-{page_text}
-\"\"\"
+3. **Story** – What kind of story does the brand tell?
+   - Is the story coherent, meaningful, and appealing?
+   - Does it help the audience quickly understand what the brand stands for?
+
+4. **Involvement** – How good is the brand at involving people?
+   - Does it invite participation, interaction, or shared purpose?
+   - Does the brand treat the audience as part of its world?
+
+5. **Repetition** – How often does the brand repeat important elements throughout the experience?
+   - Are there recognisable phrases, messages, or visuals used consistently?
+
+6. **Consistency** – How consistently does the brand use its most important elements?
+   - Are tone, design, and story aligned across the pages and touchpoints?
+   - Does it feel coherent and familiar at every interaction?
+
+---
+
+Output the results using this format exactly (for each key):
+
+Key|Score/10|Short Title|Strategic Explanation (2–4 sentences)
+
+Now evaluate the following website content:
+"""
+{website_text}
 """
 
     stream = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.7,
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": prompt}
+        ],
         stream=True
     )
 
-    buffer = ""
     for chunk in stream:
-        if not chunk.choices:
-            continue
-
-        delta = chunk.choices[0].delta
-        if hasattr(delta, "content") and delta.content:
-            buffer += delta.content
-            while "\n" in buffer:
-                line, buffer = buffer.split("\n", 1)
-                line = line.strip()
-                if "|" in line and line.count("|") == 2:
-                    yield line
+        if chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content
