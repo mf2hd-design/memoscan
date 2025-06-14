@@ -16,9 +16,9 @@ def clean_url(raw_url):
 def index():
     return render_template("index.html")
 
-@app.route("/scan", methods=["POST"])
+@app.route("/scan")
 def scan():
-    raw_url = request.form["url"]
+    raw_url = request.args.get("url", "")
     cleaned_url = clean_url(raw_url)
 
     def generate():

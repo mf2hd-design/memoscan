@@ -113,9 +113,10 @@
       const formData = new FormData(form);
       const url = formData.get("url");
 
-      const eventSource = new EventSource("/scan?" + new URLSearchParams({ url }));
+      // Send the URL as a query parameter via GET (SSE-compatible)
+      const eventSource = new EventSource("/scan?url=" + encodeURIComponent(url));
 
-      results.innerHTML = ""; // clear any loading message
+      results.innerHTML = ""; // clear loading message
 
       eventSource.onmessage = function (event) {
         const div = document.createElement("div");
