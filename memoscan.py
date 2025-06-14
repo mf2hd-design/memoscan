@@ -8,6 +8,12 @@ from dotenv import load_dotenv
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+def clean_url(url):
+    """
+    Cleans a URL by removing query parameters and trailing slashes.
+    """
+    return url.strip().split('?')[0].rstrip('/')
+
 def scrape_website_text(url):
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -20,20 +26,20 @@ def scrape_website_text(url):
 
         text = soup.get_text(separator=' ')
         cleaned_text = re.sub(r'\s+', ' ', text).strip()
-        return cleaned_text[:8000]  # Truncate for token limit
+        return cleaned_text[:8000]  # Limit for token safety
     except Exception as e:
         return f"Error scraping site: {e}"
 
 def run_memoscan_stream(website_text):
-    prompt = f"""
-You are a senior brand consultant at Saffron Brand Consultants. Your task is to assess how memorable a brand is based on its website content, using Saffron's Memorability Framework.
+    prompt = """
+You are a senior brand consultant using Saffron’s Memorability Framework to evaluate how memorable a brand is based on its website content.
 
 Saffron’s research shows that brands which score highly on these six keys are more likely to be chosen quickly, remembered over time, and preferred at a premium. Your job is to help the brand understand where it stands — and how to improve.
 
 Evaluate the brand using the six keys below. For each one, provide:
 - A score from 1 to 10
-- A short title that captures the essence of the score
-- A strategic explanation (2–4 sentences): What is working? What is missing? How could the brand improve?
+- A short title for the score
+- A strategic explanation: what is working, what is not, and how memorability could be enhanced
 
 The six keys are:
 
@@ -61,34 +67,22 @@ The six keys are:
    - Does it feel coherent and familiar at every interaction?
 
 ---
+Output the results using this format exactly (each key on a separate line):
 
-Format your response using the following structure — **one line per key** with fields separated by pipes:
-
-Key|Score/10|Short Title|Strategic Explanation
-
-Only output lines that match this format exactly. Do not add commentary before or after the results.
+Key|Score/10|Short Title|Strategic Explanation (2–4 sentences)
 
 Now evaluate the following website content:
-\"\"\"
-{website_text}
-\"\"\"
-    """
+""" + website_text
 
     stream = client.chat.completions.create(
         model="gpt-4",
         messages=[
-            {"role": "system", "content": "You are a strategic brand consultant."},
+            {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": prompt}
         ],
         stream=True
     )
 
-    buffer = ""
     for chunk in stream:
         if chunk.choices[0].delta.content:
-            buffer += chunk.choices[0].delta.content
-            while '\n' in buffer:
-                line, buffer = buffer.split('\n', 1)
-                # Validate line structure: exactly 3 pipes
-                if line.count("|") == 3:
-                    yield line.strip()
+            yield chunk.choices[0].delta.content
