@@ -24,20 +24,16 @@ def scrape_website_text(url):
     except Exception as e:
         return f"Error scraping site: {e}"
 
-def clean_url(url):
-    # Simple utility to clean up tracking parameters etc.
-    return url.split('?')[0]
-
 def run_memoscan_stream(website_text):
     prompt = f"""
-You are a senior brand consultant using Saffron’s Memorability Framework to evaluate how memorable a brand is based on its website content.
+You are a senior brand consultant at Saffron Brand Consultants. Your task is to assess how memorable a brand is based on its website content, using Saffron's Memorability Framework.
 
 Saffron’s research shows that brands which score highly on these six keys are more likely to be chosen quickly, remembered over time, and preferred at a premium. Your job is to help the brand understand where it stands — and how to improve.
 
 Evaluate the brand using the six keys below. For each one, provide:
 - A score from 1 to 10
-- A short title for the score
-- A strategic explanation: what is working, what is not, and how memorability could be enhanced
+- A short title that captures the essence of the score
+- A strategic explanation (2–4 sentences): What is working? What is missing? How could the brand improve?
 
 The six keys are:
 
@@ -66,23 +62,33 @@ The six keys are:
 
 ---
 
-Output the results using this format exactly (for each key):
+Format your response using the following structure — **one line per key** with fields separated by pipes:
 
-Key|Score/10|Short Title|Strategic Explanation (2–4 sentences)
+Key|Score/10|Short Title|Strategic Explanation
+
+Only output lines that match this format exactly. Do not add commentary before or after the results.
 
 Now evaluate the following website content:
+\"\"\"
 {website_text}
-"""
+\"\"\"
+    """
 
     stream = client.chat.completions.create(
         model="gpt-4",
         messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "system", "content": "You are a strategic brand consultant."},
             {"role": "user", "content": prompt}
         ],
         stream=True
     )
 
+    buffer = ""
     for chunk in stream:
         if chunk.choices[0].delta.content:
-            yield chunk.choices[0].delta.content
+            buffer += chunk.choices[0].delta.content
+            while '\n' in buffer:
+                line, buffer = buffer.split('\n', 1)
+                # Validate line structure: exactly 3 pipes
+                if line.count("|") == 3:
+                    yield line.strip()
