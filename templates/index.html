@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Saffron Memorability Audit – Real-Time Brand Memorability Audit</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 700px;
+            margin: auto;
+            padding: 2rem;
+        }
+
+        input {
+            width: 100%;
+            padding: 0.5rem;
+            font-size: 1rem;
+        }
+
+        button {
+            padding: 0.5rem 1rem;
+            font-size: 1rem;
+            margin-top: 1rem;
+        }
+
+        .result {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            overflow-x: auto;
+        }
+
+        .result pre {
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin: 0;
+        }
+
+        .result strong {
+            display: inline-block;
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+        }
+
+        h3 {
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Saffron Memorability Audit</h1>
+    <p>Enter a brand URL and stream memorability scores in real time.</p>
+
+    <input type="text" id="urlInput" placeholder="e.g. nvidia.com or airbnb.com">
+    <button onclick="runScan()">Analyse Memorability</button>
+
+    <div id="results"></div>
+
+    <script>
+        function runScan() {
+            let url = document.getElementById("urlInput").value.trim();
+            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                url = "https://" + url;
+            }
+
+            const resultsDiv = document.getElementById("results");
+            resultsDiv.innerHTML = "<p><em>Scanning…</em></p>";
+
+            const source = new EventSource(`/stream?url=${encodeURIComponent(url)}`);
+
+            source.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                const key = data.key;
+                const fullText = data.result;
+
+                // Extract score
+                const scoreMatch = fullText.match(/Score:\s*(\d{1,3})\/100/i);
+                const score = scoreMatch ? scoreMatch[1] : "–";
+                const explanation = fullText.replace(/Score:\s*\d{1,3}\/100/i, "").trim();
+
+                // Create result block
+                const block = document.createElement("div");
+                block.classList.add("result");
+                block.innerHTML = `
+                    <h3>${key}</h3>
+                    <div><strong style="color: ${scoreColor(score)};">Score: ${score}/100</strong></div>
+                    <pre>${explanation}</pre>
+                `;
+                resultsDiv.appendChild(block);
+            };
+
+            source.addEventListener("end", function () {
+                const doneMsg = document.createElement("p");
+                doneMsg.innerText = "✅ Scan complete.";
+                document.getElementById("results").appendChild(doneMsg);
+                source.close();
+            });
+
+            function scoreColor(score) {
+                const s = parseInt(score);
+                if (isNaN(s)) return "#000";
+                if (s >= 80) return "green";
+                if (s >= 60) return "orange";
+                return "red";
+            }
+        }
+    </script>
+</body>
+</html>
