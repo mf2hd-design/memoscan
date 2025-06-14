@@ -1,16 +1,7 @@
 from flask import Flask, render_template, request, Response
-from memoscan import run_memoscan_stream
-from urllib.parse import urlparse
-import os
+from memoscan import run_memoscan_stream, clean_url
 
 app = Flask(__name__)
-
-def clean_url(raw_url):
-    """Ensure the URL is valid and prepend scheme if missing."""
-    parsed = urlparse(raw_url)
-    if not parsed.scheme:
-        raw_url = 'https://' + raw_url
-    return raw_url
 
 @app.route("/")
 def index():
@@ -18,45 +9,29 @@ def index():
 
 @app.route("/scan")
 def scan():
-    raw_url = request.args.get("url", "")
-    cleaned_url = clean_url(raw_url)
+    url = request.args.get("url", "")
+    cleaned_url = clean_url(url)
 
     def generate():
-        for result in run_memoscan_stream(cleaned_url):
-            # Debug log (optional, remove in production)
-            print("YIELD:", result)
-
-            # Handle if result is a string like "Key|Score|Explanation"
-            if isinstance(result, str):
+        try:
+            for result in run_memoscan_stream(cleaned_url):
                 try:
-                    parts = result.split("|")
-                    key = parts[0].strip()
-                    score = parts[1].strip()
-                    explanation = parts[2].strip() if len(parts) > 2 else "No explanation."
-                except Exception:
-                    key = "Parse Error"
-                    score = "?"
-                    explanation = f"Could not parse result: {result}"
-            # Handle if result is a dictionary
-            elif isinstance(result, dict):
-                key = result.get("key", "Unknown Key")
-                score = result.get("score", "?")
-                explanation = result.get("explanation", "No explanation provided.")
-            else:
-                key = "Invalid Result"
-                score = "?"
-                explanation = str(result)
+                    key, score, explanation = result.split("|", 2)
+                except ValueError:
+                    yield f"data: <div class='result-block'>⚠️ Invalid format: {result}</div>\n\n"
+                    continue
 
-            block = f"""
-            <div class='result-block'>
-                <h2>{key}: <span class='score'>{score}/10</span></h2>
-                <p>{explanation}</p>
-            </div>
-            """
-            yield f"data: {block}\n\n"
+                html_block = (
+                    f"<div class='result-block'>"
+                    f"<div><strong>{key}</strong>: <span class='score'>{score}/10</span></div>"
+                    f"<div style='white-space: pre-wrap; margin-top: 5px;'>{explanation}</div>"
+                    f"</div>"
+                )
+                yield f"data: {html_block}\n\n"
+        except Exception as e:
+            yield f"data: <div class='result-block error'>⚠️ Internal error: {str(e)}</div>\n\n"
 
     return Response(generate(), mimetype="text/event-stream")
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(debug=True, host="0.0.0.0", port=10000)
