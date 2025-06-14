@@ -1,28 +1,40 @@
-# app.py
-
 from flask import Flask, render_template, request, Response
 from memoscan import run_memoscan_stream
+from urllib.parse import urlparse
+import os
 
 app = Flask(__name__)
 
-@app.route("/", methods=["GET"])
+def clean_url(raw_url):
+    """Ensure the URL is valid and prepend scheme if missing."""
+    parsed = urlparse(raw_url)
+    if not parsed.scheme:
+        raw_url = 'https://' + raw_url
+    return raw_url
+
+@app.route("/")
 def index():
     return render_template("index.html")
 
-@app.route("/stream")
-def stream():
-    raw_url = request.args.get("url", "").strip()
+@app.route("/scan", methods=["POST"])
+def scan():
+    raw_url = request.form["url"]
+    cleaned_url = clean_url(raw_url)
 
-    # Normalize user input to include https:// if missing
-    if not raw_url.startswith("http://") and not raw_url.startswith("https://"):
-        url = "https://" + raw_url
-    else:
-        url = raw_url
+    def generate():
+        for key, result in run_memoscan_stream(cleaned_url):
+            score = result.get("score", "?")
+            explanation = result.get("explanation", "No explanation provided.")
+            block = f"""
+            <div class='result-block'>
+                <h2>{key}: <span class='score'>{score}/10</span></h2>
+                <p>{explanation}</p>
+            </div>
+            """
+            yield f"data: {block}\n\n"
 
-    return Response(run_memoscan_stream(url), mimetype="text/event-stream")
+    return Response(generate(), mimetype="text/event-stream")
 
 if __name__ == "__main__":
-import os
-
-port = int(os.environ.get("PORT", 5000))
-app.run(host='0.0.0.0', port=port, debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)
