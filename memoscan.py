@@ -94,3 +94,8 @@ Now evaluate the following website content:
     for chunk in stream:
         if chunk.choices[0].delta.content:
             yield chunk.choices[0].delta.content
+
+def clean_url(url):
+    if not url.startswith("http"):
+        return "https://" + url
+    return url
