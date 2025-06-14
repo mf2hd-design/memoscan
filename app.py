@@ -1,3 +1,4 @@
+
 from flask import Flask, render_template, request, Response
 from memoscan import run_memoscan_stream, clean_url
 
@@ -9,27 +10,17 @@ def index():
 
 @app.route("/scan")
 def scan():
-    url = request.args.get("url", "")
-    cleaned_url = clean_url(url)
+    url = request.args.get("url", "").strip()
+    cleaned = clean_url(url)
+    print(f"[DEBUG] /scan requested for: {cleaned}")
 
     def generate():
         try:
-            for result in run_memoscan_stream(cleaned_url):
-                try:
-                    key, score, explanation = result.split("|", 2)
-                except ValueError:
-                    yield f"data: <div class='result-block'>⚠️ Invalid format: {result}</div>\n\n"
-                    continue
-
-                html_block = (
-                    f"<div class='result-block'>"
-                    f"<div><strong>{key}</strong>: <span class='score'>{score}/10</span></div>"
-                    f"<div style='white-space: pre-wrap; margin-top: 5px;'>{explanation}</div>"
-                    f"</div>"
-                )
-                yield f"data: {html_block}\n\n"
+            for line in run_memoscan_stream(cleaned):
+                yield f"data: {line}\n\n"
         except Exception as e:
-            yield f"data: <div class='result-block error'>⚠️ Internal error: {str(e)}</div>\n\n"
+            print("[ERROR] Streaming failure:", e)
+            yield f"data: ⚠️ Internal error: {e}\n\n"
 
     return Response(generate(), mimetype="text/event-stream")
 
