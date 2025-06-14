@@ -22,7 +22,8 @@ def scan():
     cleaned_url = clean_url(raw_url)
 
     def generate():
-        for key, result in run_memoscan_stream(cleaned_url):
+        for result in run_memoscan_stream(cleaned_url):
+            key = result.get("key", "Unknown Key")
             score = result.get("score", "?")
             explanation = result.get("explanation", "No explanation provided.")
             block = f"""
