@@ -92,33 +92,37 @@
     <div id="results"></div>
 
     <script>
-        document.getElementById("scan-button").addEventListener("click", function () {
-            const url = document.getElementById("url").value.trim();
-            const resultsDiv = document.getElementById("results");
-            const statusDiv = document.getElementById("status");
+    document.getElementById("scan-button").addEventListener("click", function () {
+        const url = document.getElementById("url").value.trim();
+        const resultsDiv = document.getElementById("results");
+        const statusDiv = document.getElementById("status");
 
-            resultsDiv.innerHTML = "";
-            statusDiv.innerText = "Scanning...";
+        resultsDiv.innerHTML = "";
+        statusDiv.innerText = "Scanning...";
 
-            const eventSource = new EventSource(`/scan?url=${encodeURIComponent(url)}`);
+        const eventSource = new EventSource(`/scan?url=${encodeURIComponent(url)}`);
 
-            let receivedSomething = false;
+        let fullResponse = "";
+        let receivedSomething = false;
 
-            eventSource.onmessage = function (event) {
-                if (event.data.includes("result-block")) {
-                    resultsDiv.innerHTML += event.data;
-                    receivedSomething = true;
-                    statusDiv.innerText = "Done.";
-                }
-            };
+        eventSource.onmessage = function (event) {
+            if (event.data && event.data.trim() !== "") {
+                fullResponse += event.data;
+                receivedSomething = true;
+                // Optionally update the UI live
+                resultsDiv.innerText = fullResponse;
+            }
+        };
 
-            eventSource.onerror = function () {
-                if (!receivedSomething) {
-                    statusDiv.innerText = "Something went wrong. Please try again.";
-                }
-                eventSource.close();
-            };
-        });
-    </script>
+        eventSource.onerror = function () {
+            eventSource.close();
+            if (receivedSomething) {
+                statusDiv.innerText = "Done.";
+            } else {
+                statusDiv.innerText = "Something went wrong. Please try again.";
+            }
+        };
+    });
+</script>
 </body>
 </html>
