@@ -101,26 +101,44 @@
         statusDiv.innerText = "Scanning...";
 
         const eventSource = new EventSource(`/scan?url=${encodeURIComponent(url)}`);
-
-        let fullResponse = "";
+        let buffer = "";
         let receivedSomething = false;
 
         eventSource.onmessage = function (event) {
-            if (event.data && event.data.trim() !== "") {
-                fullResponse += event.data;
-                receivedSomething = true;
-                // Optionally update the UI live
-                resultsDiv.innerText = fullResponse;
+            buffer += event.data;
+
+            // Split only on newline-delimited chunks
+            const lines = buffer.split("\n");
+
+            // Keep the last unfinished line in buffer
+            buffer = lines.pop();
+
+            for (const line of lines) {
+                if (line.trim().length > 0) {
+                    const parts = line.split("|");
+                    if (parts.length === 4) {
+                        const [key, score, title, explanation] = parts;
+                        const html = `
+                            <div class="result-block">
+                                <h3>${key} (${score}): ${title}</h3>
+                                <p>${explanation}</p>
+                            </div>`;
+                        resultsDiv.innerHTML += html;
+                        receivedSomething = true;
+                        statusDiv.innerText = "Done.";
+                    } else {
+                        // skip malformed lines
+                        console.warn("Invalid line:", line);
+                    }
+                }
             }
         };
 
         eventSource.onerror = function () {
-            eventSource.close();
-            if (receivedSomething) {
-                statusDiv.innerText = "Done.";
-            } else {
+            if (!receivedSomething) {
                 statusDiv.innerText = "Something went wrong. Please try again.";
             }
+            eventSource.close();
         };
     });
 </script>
