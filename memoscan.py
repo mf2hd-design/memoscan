@@ -2,8 +2,8 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import os
-from dotenv import load_dotenv
 from openai import OpenAI
+from dotenv import load_dotenv
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -20,75 +20,81 @@ def scrape_website_text(url):
 
         text = soup.get_text(separator=' ')
         cleaned_text = re.sub(r'\s+', ' ', text).strip()
-        return cleaned_text[:8000]  # Truncate for token limit
+        return cleaned_text[:8000]  # Truncate for token safety
     except Exception as e:
         return f"Error scraping site: {e}"
 
-def run_memoscan_stream(url):
-    website_text = scrape_website_text(url)
+def clean_url(url):
+    if not url.startswith("http"):
+        return "https://" + url
+    return url
 
-    prompt = f"""
-You are a senior brand strategist at Saffron. Use Saffron’s Memorability Framework to evaluate how memorable the brand is based on this scraped website content. Assess it using the six keys of memorability:
+def run_memoscan_stream(website_text):
+    prompt = """
+You are a senior brand consultant using Saffron’s Memorability Framework to evaluate how memorable a brand is based on its website content.
+
+Saffron’s research shows that brands which score highly on these six keys are more likely to be chosen quickly, remembered over time, and preferred at a premium. Your job is to help the brand understand where it stands — and how to improve.
+
+Evaluate the brand using the six keys below. For each one, provide:
+- A score from 1 to 10
+- A short title summarizing the result
+- A strategic explanation: what’s working, what’s not, and how memorability can be improved
+
+The six keys are:
 
 1. **Emotion** – What level of emotion does the brand evoke?
-   - Does it create warmth, admiration, joy, excitement, trust?
+   - Does it trigger emotional reactions or is it purely factual?
+   - Does the tone create connection, warmth, trust, admiration, or excitement?
 
 2. **Attention** – How well does the brand capture and sustain attention?
-   - Does the content surprise, intrigue, or feel distinctive?
+   - Does the content and story surprise, intrigue, or feel distinctive?
+   - Is there a creative spark or hook that keeps people engaged?
 
 3. **Story** – What kind of story does the brand tell?
-   - Is it coherent, meaningful, and appealing?
-   - Can the audience quickly grasp what the brand stands for?
+   - Is the story coherent, meaningful, and appealing?
+   - Does it help the audience quickly understand what the brand stands for?
 
 4. **Involvement** – How good is the brand at involving people?
-   - Does it invite interaction, shared purpose, or participation?
+   - Does it invite participation, interaction, or shared purpose?
+   - Does the brand treat the audience as part of its world?
 
-5. **Repetition** – How often does the brand repeat important elements?
-   - Are phrases, visuals, or themes reused to reinforce recall?
+5. **Repetition** – How often does the brand repeat important elements throughout the experience?
+   - Are there recognisable phrases, messages, or visuals used consistently?
 
-6. **Consistency** – How consistently are the brand’s core elements used?
-   - Are tone, layout, visuals, and story aligned across the experience?
+6. **Consistency** – How consistently does the brand use its most important elements?
+   - Are tone, design, and story aligned across the pages and touchpoints?
+   - Does it feel coherent and familiar at every interaction?
 
 ---
 
-Evaluate each of these six keys. For each one, provide:
-- A score from 1–10
-- A short headline
-- A strategic explanation (3–4 sentences). Explain what works, what doesn’t, and how to improve.
+Output each rating exactly using this format on a separate line:
 
-Return the results in **JSON** format using this exact structure:
+Key | Score/10 | Short Title | Strategic Explanation (2–4 sentences)
 
-[
-  {{
-    "key": "Emotion",
-    "score": 6,
-    "title": "Some Warmth, Some Distance",
-    "explanation": "The brand conveys professionalism and care through its visuals, but the language remains fairly neutral. Emotional triggers are limited. Greater storytelling or human-focused language could elevate the emotional resonance."
-  }},
-  ...
-]
+Now evaluate the following website content:
+""" + website_text
 
-Now assess this content:
-
-\"\"\"{website_text}\"\"\"
-"""
-
-    response = client.chat.completions.create(
+    stream = client.chat.completions.create(
         model="gpt-4",
-        stream=True,
         messages=[
-            {"role": "system", "content": "You are a thoughtful, critical brand strategist."},
+            {"role": "system", "content": "You are a helpful assistant and strategic branding expert."},
             {"role": "user", "content": prompt}
-        ]
+        ],
+        stream=True
     )
 
-    for chunk in response:
-        if hasattr(chunk.choices[0].delta, "content"):
-            yield chunk.choices[0].delta.content
+    buffer = ""
+    for chunk in stream:
+        delta = chunk.choices[0].delta
+        if hasattr(delta, "content") and delta.content:
+            buffer += delta.content
+            if "\n" in buffer:
+                lines = buffer.split("\n")
+                for line in lines[:-1]:
+                    line = line.strip()
+                    if line:
+                        yield f"<div class='result-block'>{line}</div>"
+                buffer = lines[-1]
 
-def clean_url(url: str) -> str:
-    """Ensures the URL starts with https:// and strips whitespace."""
-    url = url.strip()
-    if not url.startswith("http://") and not url.startswith("https://"):
-        url = "https://" + url
-    return url
+    if buffer.strip():
+        yield f"<div class='result-block'>{buffer.strip()}</div>"
