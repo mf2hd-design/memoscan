@@ -24,6 +24,10 @@ def scrape_website_text(url):
     except Exception as e:
         return f"Error scraping site: {e}"
 
+def clean_url(url):
+    # Simple utility to clean up tracking parameters etc.
+    return url.split('?')[0]
+
 def run_memoscan_stream(website_text):
     prompt = f"""
 You are a senior brand consultant using Saffron’s Memorability Framework to evaluate how memorable a brand is based on its website content.
@@ -67,7 +71,6 @@ Output the results using this format exactly (for each key):
 Key|Score/10|Short Title|Strategic Explanation (2–4 sentences)
 
 Now evaluate the following website content:
-"""
 {website_text}
 """
 
