@@ -1,136 +1,124 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>MemoScan</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    * {
-      box-sizing: border-box;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    }
+    <meta charset="UTF-8">
+    <title>MemoScan – Brand Memorability Audit</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            margin: 0;
+            padding: 2rem;
+        }
 
-    body {
-      margin: 0;
-      padding: 2rem;
-      background-color: #f9f9fb;
-      color: #333;
-    }
+        h1 {
+            color: #222;
+            margin-bottom: 1rem;
+        }
 
-    h1 {
-      font-size: 2rem;
-      margin-bottom: 1rem;
-      color: #111;
-    }
+        #form-section {
+            background: #fff;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+        }
 
-    form {
-      margin-bottom: 2rem;
-      display: flex;
-      flex-direction: column;
-      max-width: 600px;
-    }
+        input[type="text"] {
+            width: 80%;
+            padding: 0.75rem;
+            font-size: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            margin-right: 1rem;
+        }
 
-    input[type="text"] {
-      padding: 0.8rem;
-      font-size: 1rem;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      margin-bottom: 1rem;
-    }
+        button {
+            padding: 0.75rem 1.25rem;
+            font-size: 1rem;
+            background-color: #007acc;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
 
-    button {
-      padding: 0.8rem;
-      font-size: 1rem;
-      background-color: #111;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
+        button:hover {
+            background-color: #005fa3;
+        }
 
-    button:hover {
-      background-color: #444;
-    }
+        #status {
+            margin-top: 1rem;
+            font-style: italic;
+            color: #666;
+        }
 
-    #results {
-      max-width: 800px;
-    }
+        #results {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
 
-    .result-block {
-      background: white;
-      padding: 1.2rem;
-      margin-bottom: 1rem;
-      border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-    }
+        .result-block {
+            background: #fff;
+            border-left: 6px solid #007acc;
+            padding: 1rem 1.25rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+        }
 
-    .result-block h2 {
-      margin-top: 0;
-      font-size: 1.2rem;
-    }
+        .score {
+            font-weight: bold;
+            color: #007acc;
+            margin-left: 0.25rem;
+        }
 
-    .score {
-      font-weight: bold;
-      color: #0070f3;
-    }
-
-    .result-block p {
-      white-space: pre-wrap;
-      margin: 0.5rem 0 0;
-      line-height: 1.5;
-    }
-
-    footer {
-      margin-top: 3rem;
-      font-size: 0.9rem;
-      color: #888;
-    }
-  </style>
+        .result-block.error {
+            border-left-color: red;
+            background: #ffe5e5;
+            color: #a00;
+        }
+    </style>
 </head>
 <body>
-  <h1>🔍 MemoScan — Brand Memorability Audit</h1>
+    <h1>🧠 MemoScan</h1>
+    <div id="form-section">
+        <p>Enter a brand website URL to scan for memorability:</p>
+        <input type="text" id="url" placeholder="example.com or www.brand.com" />
+        <button id="scan-button">Scan</button>
+        <div id="status"></div>
+    </div>
+    <div id="results"></div>
 
-  <form id="scanForm">
-    <input type="text" name="url" placeholder="Enter a brand URL (e.g. example.com)" required>
-    <button type="submit">Run Scan</button>
-  </form>
+    <script>
+        document.getElementById("scan-button").addEventListener("click", function () {
+            const url = document.getElementById("url").value.trim();
+            const resultsDiv = document.getElementById("results");
+            const statusDiv = document.getElementById("status");
 
-  <div id="results"></div>
+            resultsDiv.innerHTML = "";
+            statusDiv.innerText = "Scanning...";
 
-  <footer>
-    Powered by Saffron Lab · v1.0
-  </footer>
+            const eventSource = new EventSource(`/scan?url=${encodeURIComponent(url)}`);
 
-  <script>
-    const form = document.getElementById("scanForm");
-    const results = document.getElementById("results");
+            let receivedSomething = false;
 
-    form.addEventListener("submit", function (e) {
-      e.preventDefault();
-      results.innerHTML = "<p><em>Scanning…</em></p>";
+            eventSource.onmessage = function (event) {
+                if (event.data.includes("result-block")) {
+                    resultsDiv.innerHTML += event.data;
+                    receivedSomething = true;
+                    statusDiv.innerText = "Done.";
+                }
+            };
 
-      const formData = new FormData(form);
-      const url = formData.get("url");
-
-      // Send the URL as a query parameter via GET (SSE-compatible)
-      const eventSource = new EventSource("/scan?url=" + encodeURIComponent(url));
-
-      results.innerHTML = ""; // clear loading message
-
-      eventSource.onmessage = function (event) {
-        const div = document.createElement("div");
-        div.innerHTML = event.data;
-        results.appendChild(div);
-      };
-
-      eventSource.onerror = function () {
-        eventSource.close();
-        const err = document.createElement("p");
-        err.textContent = "Something went wrong. Please try again.";
-        results.appendChild(err);
-      };
-    });
-  </script>
+            eventSource.onerror = function () {
+                if (!receivedSomething) {
+                    statusDiv.innerText = "Something went wrong. Please try again.";
+                }
+                eventSource.close();
+            };
+        });
+    </script>
 </body>
 </html>
